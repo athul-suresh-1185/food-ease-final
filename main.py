@@ -29,6 +29,29 @@ def token_required(func):
 
     return decorated
 
+def admin_required(func):
+@wraps(func)
+def decorated(*args, **kwargs):
+    token = request.headers.get('Authorization')
+
+    if not token:
+        return jsonify({'message': 'Token is missing'}), 401
+
+    try:
+        data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+        current_user_id = data['user_id']
+    except:
+        return jsonify({'message': 'Token is invalid'}), 401
+
+    # Check if the user is an admin
+    admin_user = Admin.query.filter_by(admin_id=current_user_id).first()
+    if not admin_user:
+        return jsonify({'message': 'Admin access required'}), 403
+
+    return func(admin_user, *args, **kwargs)
+
+return decorated
+
 # Flask app initialization
 def create_app():
     app = Flask(__name__)
@@ -43,9 +66,41 @@ def create_app():
             db.create_all()
             print('Create Database!')
 
-    @app.route('/test',methods=['GET'])
-    def test():
-        print('Something')
+  @app.route('/admin/login', methods=['POST'])
+  def admin_login():
+      data = request.get_json()
+      username = data.get('username')
+      password = data.get('password')
+
+      if not username or not password:
+          return jsonify({'message': 'Username and password are required'}), 400
+
+      admin = Admin.query.filter_by(user_name=username).first()
+      if not admin or not bcrypt.check_password_hash(admin.password, password):
+          return jsonify({'message': 'Invalid credentials'}), 401
+
+      # Generate a JWT token
+      token = jwt.encode({'user_id': admin.admin_id}, app.config['SECRET_KEY'], algorithm="HS256")
+
+      return jsonify({'token': token}), 200
+    
+    @app.route('/admin/login', methods=['POST'])
+    def admin_login():
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+
+        if not username or not password:
+            return jsonify({'message': 'Username and password are required'}), 400
+
+        admin = Admin.query.filter_by(user_name=username).first()
+        if not admin or not bcrypt.check_password_hash(admin.password, password):
+            return jsonify({'message': 'Invalid credentials'}), 401
+
+        # Generate a JWT token
+        token = jwt.encode({'user_id': admin.admin_id}, app.config['SECRET_KEY'], algorithm="HS256")
+
+        return jsonify({'token': token}), 200
 
     @app.route('/user-login', methods=['POST'])
     def login():
